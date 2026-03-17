@@ -66,7 +66,8 @@ app.get('/api/info', (req, res) => {
         dumpJson: true,
         noPlaylist: true,
         noCheckCertificates: true,
-        noWarnings: true
+        noWarnings: true,
+        extractorArgs: 'youtube:player_client=android' // Bypass YouTube anti-bot
     }, {
         shell: true // Required for some environments
     }).then(info => {
