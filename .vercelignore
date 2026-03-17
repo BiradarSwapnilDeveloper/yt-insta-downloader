@@ -1,0 +1,7 @@
+node_modules
+*.exe
+yt-dlp
+ffmpeg
+.vscode
+O:
+temp

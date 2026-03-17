@@ -1,0 +1,12 @@
+node_modules/
+.vercel/
+.vscode/
+*.exe
+*.log
+temp/
+O:/temp/
+/tmp/
+.DS_Store
+package-lock.json
+*.json_old
+info_*.json
