@@ -56,68 +56,105 @@ const FFMPEG_PATH = process.platform === 'win32' ? path.join(__dirname, 'ffmpeg.
 // Helper to sanitize filenames
 const sanitizeFilename = (name) => name.replace(/[^\w\s-\.]/gi, '').substring(0, 100);
 
+// Robust extraction helper
+async function fetchVideoInfo(videoUrl) {
+    let lastError = null;
+    
+    // Attempt 1: play-dl (Native node library, often better headers)
+    try {
+        console.log('Attempting extraction via play-dl...');
+        const play = require('play-dl');
+        const info = await play.video_info(videoUrl);
+        
+        const finalFormats = info.format.map(f => ({
+            formatId: f.format_id || f.itag.toString(),
+            extension: f.container || (f.mimeType ? f.mimeType.split('/')[1].split(';')[0] : 'mp4'),
+            resolution: f.qualityLabel || (f.height ? `${f.height}p` : 'audio'),
+            quality: f.qualityLabel || '',
+            filesize: f.contentLength || 0,
+            hasVideo: f.hasVideo,
+            hasAudio: f.hasAudio,
+            url: f.url // play-dl gives direct URLs
+        })).filter(f => f.resolution);
+
+        return {
+            title: info.video_details.title,
+            thumbnail: info.video_details.thumbnails.pop().url,
+            duration: info.video_details.durationRaw,
+            uploader: info.video_details.channel.name,
+            formats: finalFormats,
+            source: 'play-dl'
+        };
+    } catch (e) {
+        console.error('play-dl failed:', e.message);
+        lastError = e;
+    }
+
+    // Attempt 2: yt-dlp with multi-client fallback
+    try {
+        console.log('Attempting extraction via yt-dlp fallback...');
+        const ytDlpObj = require('yt-dlp-exec');
+        const info = await ytDlpObj(videoUrl, {
+            dumpJson: true,
+            noPlaylist: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            extractorArgs: 'youtube:player_client=ios,tv,web_creator,mweb,android'
+        }, { shell: true });
+
+        const finalFormats = info.formats
+            .filter(f => f.height || f.acodec !== 'none')
+            .map(f => ({
+                formatId: f.format_id,
+                extension: f.ext === 'webm' || !f.ext ? 'mp4' : f.ext,
+                resolution: f.height ? `${f.height}p` : 'audio',
+                quality: f.format_note || '',
+                filesize: f.filesize || f.filesize_approx || 0,
+                hasVideo: f.vcodec !== 'none',
+                hasAudio: f.acodec !== 'none'
+            }));
+
+        return {
+            title: info.title,
+            thumbnail: info.thumbnail,
+            duration: info.duration_string,
+            uploader: info.uploader || info.channel,
+            formats: finalFormats,
+            source: 'yt-dlp',
+            raw: info
+        };
+    } catch (e) {
+        console.error('yt-dlp failed:', e.message);
+        lastError = e;
+    }
+
+    throw new Error(`All extraction methods failed. Last error: ${lastError.message}`);
+}
+
 // Endpoint to get video information
-app.get('/api/info', (req, res) => {
+app.get('/api/info', async (req, res) => {
     const videoUrl = req.query.url;
     if (!videoUrl) return res.status(400).json({ error: 'URL is required' });
 
-    const ytDlpObj = require('yt-dlp-exec');
-    ytDlpObj(videoUrl, {
-        dumpJson: true,
-        noPlaylist: true,
-        noCheckCertificates: true,
-        noWarnings: true,
-        extractorArgs: 'youtube:player_client=ios,tv,web_creator,mweb,android' // Robust multi-client fallback
-    }, {
-        shell: true // Required for some environments
-    }).then(info => {
-        try {
-            const urlHash = crypto.createHash('md5').update(videoUrl).digest('hex');
-            const infoFile = path.join(process.env.TEMP, `info_${urlHash}.json`);
-            fs.writeFileSync(infoFile, JSON.stringify(info));
-            
-            let finalFormats = [];
-            let seenResolutions = new Set();
-            
-            // Extract video formats and deduplicate by resolution
-            const videoFormats = info.formats
-                .filter(f => f.vcodec !== 'none' && f.height)
-                .sort((a, b) => b.height - a.height); // highest to lowest
-                
-            for (let f of videoFormats) {
-                let res = `${f.height}p`;
-                // include resolutions from ~144p to 1080p+
-                if (!seenResolutions.has(res)) {
-                    seenResolutions.add(res);
-                    finalFormats.push({
-                        formatId: f.format_id,
-                        extension: f.ext === 'webm' || !f.ext ? 'mp4' : f.ext,
-                        resolution: res,
-                        quality: f.format_note || '',
-                        filesize: f.filesize || f.filesize_approx,
-                        hasVideo: true,
-                        // if the format specifically doesn't have an audio codec inside it, hasAudio is false and we need to use stream
-                        hasAudio: f.acodec && f.acodec !== 'none'
-                    });
-                }
-            }
+    try {
+        const info = await fetchVideoInfo(videoUrl);
+        const urlHash = crypto.createHash('md5').update(videoUrl).digest('hex');
+        const infoFile = path.join(process.env.TEMP, `info_${urlHash}.json`);
+        
+        // Cache info for downloads
+        fs.writeFileSync(infoFile, JSON.stringify(info));
 
-            res.json({
-                title: info.title,
-                thumbnail: info.thumbnail,
-                duration: info.duration_string,
-                uploader: info.uploader || info.channel,
-                formats: finalFormats,
-                urlHash: urlHash
-            });
-        } catch (e) {
-            console.error(e);
-            res.status(500).json({ error: 'Error parsing video information' });
-        }
-    }).catch(e => {
-        console.error('Info fetching error via ytDlp:', e);
-        return res.status(500).json({ error: 'Failed to fetch video information. Please check the URL.', details: e ? e.message : String(e) });
-    });
+        res.json({
+            ...info,
+            urlHash: urlHash
+        });
+    } catch (e) {
+        console.error('API Info Error:', e);
+        res.status(500).json({ 
+            error: 'Failed to fetch video information. YouTube is aggressively blocking data center IPs.', 
+            details: e.message 
+        });
+    }
 });
 
 // Endpoint to download
@@ -131,14 +168,27 @@ app.get('/api/download', (req, res) => {
     // Check if we have cached info to bypass extraction delay
     const targetHash = urlHash || crypto.createHash('md5').update(url).digest('hex');
     const infoFile = path.join(process.env.TEMP, `info_${targetHash}.json`);
-    const hasCachedInfo = fs.existsSync(infoFile);
+    const cachedInfo = JSON.parse(fs.readFileSync(infoFile));
+    const isPlayDL = cachedInfo.source === 'play-dl';
     
-    // Use --load-info-json to instantly start download instead of passing url
-    const sourceArg = hasCachedInfo ? ['--load-info-json', infoFile] : [url];
+    // For play-dl, we might already have the URL or need to re-fetch it
+    const formatData = cachedInfo.formats.find(f => f.formatId === format);
 
-    if (hasAudio === 'true' || hasAudio === true) {
-        // Instant streaming for formats that already include both audio and video (like 360p, 720p)
+    if (hasAudio === 'true' || hasAudio === true || (formatData && formatData.hasAudio)) {
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedTitle)}.${finalExt}"`);
+        
+        if (isPlayDL && formatData.url) {
+            // Direct streaming for play-dl URLs
+            axios({
+                method: 'get',
+                url: formatData.url,
+                responseType: 'stream',
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            }).then(response => response.data.pipe(res))
+              .catch(e => res.status(500).send('Streaming failed'));
+            return;
+        }
+
         const ytdlp = spawn(YTDLP_PATH, [
             ...sourceArg,
             '-f', format,
@@ -168,9 +218,8 @@ app.get('/api/download', (req, res) => {
             info = JSON.parse(stdout);
         }
 
-        const videoFormat = info.formats.find(f => f.format_id === format);
-        const audioFormats = info.formats.filter(f => f.acodec !== 'none' && (f.vcodec === 'none' || !f.vcodec)).reverse();
-        const audioFormat = audioFormats.find(f => f.ext === 'm4a') || audioFormats[0];
+        const videoFormat = info.formats.find(f => f.formatId === format || f.format_id === format);
+        const audioFormat = info.formats.filter(f => f.hasAudio && !f.hasVideo).pop() || info.formats.find(f => f.hasAudio);
 
         if (videoFormat && videoFormat.url && audioFormat && audioFormat.url) {
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedTitle)}.${finalExt}"`);
@@ -199,7 +248,7 @@ app.get('/api/download', (req, res) => {
     const ytdlpArgs = [];
 });
 // Endpoint for MP3 conversion
-app.get('/api/audio', (req, res) => {
+app.get('/api/audio', async (req, res) => {
     const { url, urlHash, title } = req.query;
     if (!url) return res.status(400).send('URL is required');
 
@@ -209,34 +258,61 @@ app.get('/api/audio', (req, res) => {
     
     const targetHash = urlHash || crypto.createHash('md5').update(url).digest('hex');
     const infoFile = path.join(process.env.TEMP, `info_${targetHash}.json`);
-    const hasCachedInfo = fs.existsSync(infoFile);
-    const sourceArg = hasCachedInfo ? ['--load-info-json', infoFile] : [url];
+    
+    try {
+        let infoData;
+        if (fs.existsSync(infoFile)) {
+            infoData = JSON.parse(fs.readFileSync(infoFile));
+        } else {
+            infoData = await fetchVideoInfo(url);
+        }
 
-    const ytdlp = spawn(YTDLP_PATH, [
-        ...sourceArg, 
-        '-f', 'bestaudio', 
-        '-o', '-',
-        '--extractor-args', 'youtube:player_client=ios,tv,web_creator,mweb,android',
-        '--concurrent-fragments', '4',
-        '--http-chunk-size', '10M',
-        '--quiet',
-        '--no-warnings'
-    ]);
-    const ffmpegProcess = spawn(FFMPEG_PATH, [
-        '-i', 'pipe:0',
-        '-codec:a', 'libmp3lame',
-        '-qscale:a', '2',
-        '-f', 'mp3',
-        'pipe:1'
-    ]);
+        const audioFormat = infoData.formats.filter(f => f.hasAudio && !f.hasVideo).pop() || infoData.formats.find(f => f.hasAudio);
+        const audioUrl = audioFormat ? audioFormat.url : null;
 
-    ytdlp.stdout.pipe(ffmpegProcess.stdin);
-    ffmpegProcess.stdout.pipe(res);
+        if (audioUrl) {
+            const ffmpegProcess = spawn(FFMPEG_PATH, [
+                '-i', audioUrl,
+                '-codec:a', 'libmp3lame',
+                '-qscale:a', '2',
+                '-f', 'mp3',
+                'pipe:1'
+            ]);
+            ffmpegProcess.stdout.pipe(res);
+            res.on('close', () => ffmpegProcess.kill());
+            return;
+        }
 
-    res.on('close', () => {
-        ytdlp.kill();
-        ffmpegProcess.kill();
-    });
+        // Fallback to yt-dlp
+        const ytdlp = spawn(YTDLP_PATH, [
+            url,
+            '-f', 'bestaudio', 
+            '-o', '-',
+            '--extractor-args', 'youtube:player_client=ios,tv,web_creator,mweb,android',
+            '--concurrent-fragments', '4',
+            '--http-chunk-size', '10M',
+            '--quiet',
+            '--no-warnings'
+        ]);
+        const ffmpegProcessFallback = spawn(FFMPEG_PATH, [
+            '-i', 'pipe:0',
+            '-codec:a', 'libmp3lame',
+            '-qscale:a', '2',
+            '-f', 'mp3',
+            'pipe:1'
+        ]);
+
+        ytdlp.stdout.pipe(ffmpegProcessFallback.stdin);
+        ffmpegProcessFallback.stdout.pipe(res);
+
+        res.on('close', () => {
+            ytdlp.kill();
+            ffmpegProcessFallback.kill();
+        });
+    } catch (e) {
+        console.error('Audio extraction failed:', e);
+        res.status(500).send('Audio extraction failed');
+    }
 });
 
 app.listen(PORT, () => {
