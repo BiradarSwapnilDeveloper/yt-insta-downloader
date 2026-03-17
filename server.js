@@ -128,7 +128,50 @@ async function fetchVideoInfo(videoUrl) {
         lastError = e;
     }
 
-    throw new Error(`All extraction methods failed. Last error: ${lastError.message}`);
+    // Attempt 3: Proxied API Fallback (Piped/Invidious)
+    try {
+        console.log('Attempting extraction via Proxied API fallback...');
+        const axios = require('axios');
+        const videoIdMatch = videoUrl.match(/(?:v=|\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})/);
+        const videoId = videoIdMatch ? videoIdMatch[1] : videoUrl.split('/').pop().split('?')[0];
+        
+        const response = await axios.get(`https://pipedapi.kavin.rocks/streams/${videoId}`, { timeout: 10000 });
+        const data = response.data;
+
+        const finalFormats = data.videoStreams.map(s => ({
+            formatId: s.url,
+            extension: 'mp4',
+            resolution: s.quality,
+            quality: s.quality,
+            filesize: s.contentLength || 0,
+            hasVideo: true,
+            hasAudio: !s.videoOnly,
+            url: s.url
+        })).concat(data.audioStreams.map(s => ({
+            formatId: s.url,
+            extension: 'mp3',
+            resolution: 'audio',
+            quality: `${s.bitrate}kbps`,
+            filesize: s.contentLength || 0,
+            hasVideo: false,
+            hasAudio: true,
+            url: s.url
+        })));
+
+        return {
+            title: data.title,
+            thumbnail: data.thumbnailUrl,
+            duration: new Date(data.duration * 1000).toISOString().substr(11, 8).replace(/^00:/, ''),
+            uploader: data.uploader,
+            formats: finalFormats,
+            source: 'piped-api'
+        };
+    } catch (e) {
+        console.error('Proxied API failed:', e.message);
+        lastError = e;
+    }
+
+    throw new Error(`All extraction methods failed. YouTube is blocking the server. Last error: ${lastError.message}`);
 }
 
 // Endpoint to get video information
