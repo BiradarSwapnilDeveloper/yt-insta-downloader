@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://yt-insta-downloader.onrender.com/sitemap.xml
