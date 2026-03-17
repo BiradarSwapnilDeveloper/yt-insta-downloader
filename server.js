@@ -67,7 +67,7 @@ app.get('/api/info', (req, res) => {
         noPlaylist: true,
         noCheckCertificates: true,
         noWarnings: true,
-        extractorArgs: 'youtube:player_client=android' // Bypass YouTube anti-bot
+        extractorArgs: 'youtube:player_client=ios,tv,web_creator,mweb,android' // Robust multi-client fallback
     }, {
         shell: true // Required for some environments
     }).then(info => {
@@ -143,7 +143,7 @@ app.get('/api/download', (req, res) => {
             ...sourceArg,
             '-f', format,
             '-o', '-',
-            '--extractor-args', 'youtube:player_client=android',
+            '--extractor-args', 'youtube:player_client=ios,tv,web_creator,mweb,android',
             '--concurrent-fragments', '4',
             '--http-chunk-size', '10M',
             '--no-check-certificates',
@@ -163,7 +163,7 @@ app.get('/api/download', (req, res) => {
             info = JSON.parse(fs.readFileSync(infoFile));
         } else {
             console.log('Cache missing, fetching info again...');
-            const args = [url, '--dump-json', '--no-playlist', '--no-check-certificates', '--no-warnings'];
+            const args = [url, '--dump-json', '--no-playlist', '--no-check-certificates', '--no-warnings', '--extractor-args', 'youtube:player_client=ios,tv,web_creator,mweb,android'];
             const stdout = execFileSync(YTDLP_PATH, args, { maxBuffer: 10 * 1024 * 1024 }).toString();
             info = JSON.parse(stdout);
         }
@@ -216,6 +216,7 @@ app.get('/api/audio', (req, res) => {
         ...sourceArg, 
         '-f', 'bestaudio', 
         '-o', '-',
+        '--extractor-args', 'youtube:player_client=ios,tv,web_creator,mweb,android',
         '--concurrent-fragments', '4',
         '--http-chunk-size', '10M',
         '--quiet',
