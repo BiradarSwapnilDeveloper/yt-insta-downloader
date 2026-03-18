@@ -13,10 +13,17 @@
   "type": "commonjs",
   "dependencies": {
     "@distube/yt-dlp": "^2.0.1",
+    "@distube/ytdl-core": "^4.16.12",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
+    "play-dl": "^1.9.7",
     "yt-dlp-exec": "^1.0.2"
   }
 }

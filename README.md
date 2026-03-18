@@ -1,69 +1,72 @@
-# NexDown - #1 Fast YouTube & Instagram Downloader
+# NexDown Pro - Production-Level Downloader API
 
-![NexDown Preview](https://nexdown.com/preview.jpg)
+A robust Node.js backend for downloading YouTube and Instagram videos with advanced anti-blocking features.
 
-NexDown is a premium, ultra-fast web application designed to download YouTube Videos, Shorts, Instagram Reels, and convert them to high-quality MP3 audio. Built with high performance and SEO in mind, it provides a seamless user experience with a modern, mystical UI.
+## Features
+- **Proxy Rotation**: Automatically rotates through a list of residential proxies.
+- **Anti-Block System**: Detects YouTube blocks and retries up to 5 times with different proxies and delays.
+- **Cookie Support**: Uses `cookies.txt` for authenticated requests to bypass age/region restrictions.
+- **Security**: Rate limiting, XSS protection (Helmet), and HPP protection.
+- **High Performance**: Asynchronous execution using `yt-dlp`.
 
-## 🚀 Features
+## Prerequisites
+1. **Node.js**: v18 or higher recommended.
+2. **yt-dlp**: Make sure `yt-dlp.exe` (on Windows) or `yt-dlp` (on Linux) is in the root directory.
+3. **FFmpeg**: Required for merging video and audio.
 
-- **High Resolution Downloads:** Support for 1080p, 2K, and 4K video downloads.
-- **YouTube Shorts & Instagram Reels:** Automatically detects and processes Shorts and Reels links.
-- **Studio Quality MP3:** Convert any video to high bit-rate 320kbps MP3 audio.
-- **Lightning Fast:** Optimized backend architecture using `yt-dlp` and `ffmpeg` for rapid processing.
-- **Premium UI/UX:** Modern design with glassmorphism, smooth animations, and a responsive layout.
-- **SEO Optimized:** Structured data and meta tags for maximum visibility.
+## Installation
 
-## 🛠️ Tech Stack
-
-- **Frontend:** HTML5, CSS3 (Vanilla), JavaScript (ES6+)
-- **Backend:** Node.js, Express.js
-- **Processing:** `yt-dlp` (Video extraction), `ffmpeg` (Media merging & conversion)
-- **Deployment:** Vercel / Node.js Server
-
-## 📦 Installation & Setup
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v16+)
-- [FFmpeg](https://ffmpeg.org/download.html)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-
-### Steps
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/NexDown.git
-   cd NexDown
-   ```
-
-2. **Install dependencies:**
+1. Install dependencies:
    ```bash
    npm install
    ```
 
-3. **External Binaries:**
-   Ensure `ffmpeg` and `yt-dlp` are installed and available in your system's PATH. On Windows, you can place `ffmpeg.exe` and `yt-dlp.exe` in the root directory.
-
-4. **Start the server:**
-   ```bash
-   npm start
+2. Configure Environment:
+   Create a `.env` file in the root (example provided):
    ```
-   The application will be running at `http://localhost:3000`.
+   PORT=3000
+   PROXY_LIST=http://user:pass@proxy1:port,http://user:pass@proxy2:port
+   RATE_LIMIT_MAX_REQUESTS=100
+   ```
 
-## 📂 Project Structure
+3. Add Cookies:
+   Place your `cookies.txt` file in the root directory to enable logged-in features.
 
-```text
-├── public/              # Frontend assets (HTML, CSS, JS)
-│   ├── index.html       # Main landing page
-│   ├── style.css        # Premium styling
-│   └── script.js        # Frontend logic
-├── server.js            # Node.js/Express backend
-├── package.json         # Project metadata & dependencies
-├── vercel.json          # Vercel deployment configuration
-└── README.md            # Project documentation
+## Running Locally
+
+```bash
+node server.js
 ```
 
-## 📄 License
+The server will start at `http://localhost:3000`.
 
-This project is licensed under the ISC License.
+## API Usage
 
----
-Developed with ❤️ by **Biradar Swapnil**
+### GET `/download`
+Returns metadata and direct download links for a video.
+
+**Parameters:**
+- `url`: The YouTube or Instagram URL.
+
+**Example:**
+`http://localhost:3000/download?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+
+**Success Response:**
+```json
+{
+  "title": "Video Title",
+  "thumbnail": "https://...",
+  "formats": [
+    {
+      "format_id": "22",
+      "extension": "mp4",
+      "resolution": "1280x720",
+      "url": "https://..."
+    }
+  ]
+}
+```
+
+## Security Recommendation for VPS
+- Always use a reverse proxy like **Nginx** with SSL (Certbot).
+- Use **PM2** to keep the process running: `pm2 start server.js`.
