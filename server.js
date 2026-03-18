@@ -62,10 +62,22 @@ if (!fs.existsSync(YTDLP_PATH)) {
 }
 
 // Cookie Path Resolution
+// Support COOKIES_B64 env variable for Render/production deployment
 let COOKIES_PATH = path.join(__dirname, 'cookies.txt');
-if (!fs.existsSync(COOKIES_PATH) && fs.existsSync(path.join(__dirname, 'cookies'))) {
+if (process.env.COOKIES_B64) {
+    try {
+        const cookiesTempPath = path.join(TEMP_DIR, 'yt_cookies.txt');
+        const cookiesContent = Buffer.from(process.env.COOKIES_B64, 'base64').toString('utf8');
+        fs.writeFileSync(cookiesTempPath, cookiesContent);
+        COOKIES_PATH = cookiesTempPath;
+        console.log('[Cookies] Loaded from COOKIES_B64 env variable -> ' + cookiesTempPath);
+    } catch (e) {
+        console.warn('[Cookies] Failed to decode COOKIES_B64:', e.message);
+    }
+} else if (!fs.existsSync(COOKIES_PATH) && fs.existsSync(path.join(__dirname, 'cookies'))) {
     COOKIES_PATH = path.join(__dirname, 'cookies');
 }
+console.log(`[Cookies] Path: ${COOKIES_PATH} | Exists: ${fs.existsSync(COOKIES_PATH)}`);
 
 // Latest User Agents
 const USER_AGENTS = [
