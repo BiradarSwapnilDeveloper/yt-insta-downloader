@@ -22,10 +22,6 @@ async function fetchVideoInfo() {
     loading.style.display = 'block';
 
     try {
-        if (window.location.protocol === 'file:') {
-            showError('Please access via http://localhost:3000');
-            return;
-        }
 
         const response = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
         const data = await response.json();
@@ -37,7 +33,7 @@ async function fetchVideoInfo() {
             renderResult(data, url);
         }
     } catch (err) {
-        showError('Cannot connect to server. Make sure http://localhost:3000 is running.');
+        showError('Server se connect nahi ho pa raha. Please thodi der baad try karein.');
     } finally {
         loading.style.display = 'none';
     }
