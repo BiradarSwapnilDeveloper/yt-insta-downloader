@@ -47,17 +47,27 @@ const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const FFMPEG_PATH = process.platform === 'win32' ? path.join(__dirname, 'ffmpeg.exe') : ffmpegInstaller.path;
 
 // Dynamic YTDLP Path Resolution
-let YTDLP_PATH = path.join(__dirname, 'yt-dlp.exe');
-if (!fs.existsSync(YTDLP_PATH)) {
+// Priority: ./bin/yt-dlp (Render) > yt-dlp.exe (Windows local) > yt-dlp-exec > system
+const YTDLP_BIN_PATH = path.join(__dirname, 'bin', 'yt-dlp');
+let YTDLP_PATH;
+if (fs.existsSync(YTDLP_BIN_PATH)) {
+    YTDLP_PATH = YTDLP_BIN_PATH; // Render Linux binary
+    console.log('[yt-dlp] Using ./bin/yt-dlp');
+} else if (fs.existsSync(path.join(__dirname, 'yt-dlp.exe'))) {
+    YTDLP_PATH = path.join(__dirname, 'yt-dlp.exe'); // Windows local
+    console.log('[yt-dlp] Using yt-dlp.exe');
+} else {
     try {
         const ytDlpExec = require('yt-dlp-exec/src/constants');
         if (ytDlpExec && ytDlpExec.YOUTUBE_DL_PATH && fs.existsSync(ytDlpExec.YOUTUBE_DL_PATH)) {
             YTDLP_PATH = ytDlpExec.YOUTUBE_DL_PATH;
+            console.log('[yt-dlp] Using yt-dlp-exec path:', YTDLP_PATH);
         } else {
-            YTDLP_PATH = 'yt-dlp'; // Fallback to system path
+            YTDLP_PATH = 'yt-dlp';
         }
     } catch (e) {
-        YTDLP_PATH = 'yt-dlp';
+        YTDLP_PATH = 'yt-dlp'; // System fallback
+        console.log('[yt-dlp] Using system yt-dlp');
     }
 }
 

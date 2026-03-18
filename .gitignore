@@ -10,3 +10,5 @@ O:/temp/
 package-lock.json
 *.json_old
 info_*.json
+bin/
+cookies_b64.txt
